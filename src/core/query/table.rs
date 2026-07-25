@@ -9,43 +9,80 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Row, Table, TableState};
 
 use crate::core::databases::application::query::DbValue;
+use crate::core::query::TableCommand;
 
-pub fn render_output_as_table(items: Vec<HashMap<String, DbValue>>) -> Result<()> {
-    color_eyre::install()?;
+#[derive(Debug, Clone)]
+pub struct TableEvent {
+    pub key_code: KeyCode,
+    pub value: Option<String>,
+}
 
+pub fn render_output_as_table(
+    items: Vec<HashMap<String, DbValue>>,
+    table_commands: Vec<TableCommand>,
+) -> Result<Option<TableEvent>> {
     let mut table_state = TableState::default();
     let mut column_offset = 0usize;
     let mut selected_column = 0usize;
     table_state.select_first();
-    ratatui::run(|terminal| {
-        loop {
-            terminal.draw(|frame| {
-                render(
-                    frame,
-                    &mut table_state,
-                    &mut column_offset,
-                    &mut selected_column,
-                    &items,
-                )
-            })?;
-            if let Some(key) = event::read()?.as_key_press_event() {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                    KeyCode::Char('j') | KeyCode::Down => table_state.select_next(),
-                    KeyCode::Char('k') | KeyCode::Up => table_state.select_previous(),
-                    KeyCode::Char('l') | KeyCode::Right => {
-                        selected_column = selected_column.saturating_add(1)
+    ratatui::run(
+        |terminal| -> std::result::Result<Option<TableEvent>, color_eyre::eyre::Error> {
+            loop {
+                terminal.draw(|frame| {
+                    render(
+                        frame,
+                        &mut table_state,
+                        &mut column_offset,
+                        &mut selected_column,
+                        &items,
+                    )
+                })?;
+                if let Some(key) = event::read()?.as_key_press_event() {
+                    if table_commands.contains(&TableCommand::Moviment) {
+                        match key.code.clone() {
+                            KeyCode::Char('q') | KeyCode::Esc => return Ok(None),
+                            KeyCode::Char('j') | KeyCode::Down => table_state.select_next(),
+                            KeyCode::Char('k') | KeyCode::Up => table_state.select_previous(),
+                            KeyCode::Char('l') | KeyCode::Right => {
+                                selected_column = selected_column.saturating_add(1)
+                            }
+                            KeyCode::Char('h') | KeyCode::Left => {
+                                selected_column = selected_column.saturating_sub(1)
+                            }
+                            KeyCode::Char('g') => table_state.select_first(),
+                            KeyCode::Char('G') => table_state.select_last(),
+                            _ => {}
+                        }
                     }
-                    KeyCode::Char('h') | KeyCode::Left => {
-                        selected_column = selected_column.saturating_sub(1)
+
+                    if table_commands.contains(&TableCommand::DatabaseTable) {
+                        match key.code {
+                            KeyCode::Enter
+                                if table_commands.contains(&TableCommand::DatabaseTable) =>
+                            {
+                                let Some(selected_row) = table_state.selected() else {
+                                    continue;
+                                };
+                                let Some(table_name) = items
+                                    .get(selected_row)
+                                    .and_then(|row| row.get("table_name"))
+                                    .map(format_db_value)
+                                else {
+                                    continue;
+                                };
+
+                                return Ok(Some(TableEvent {
+                                    key_code: KeyCode::Enter,
+                                    value: Some(table_name),
+                                }));
+                            }
+                            _ => {}
+                        }
                     }
-                    KeyCode::Char('g') => table_state.select_first(),
-                    KeyCode::Char('G') => table_state.select_last(),
-                    _ => {}
                 }
             }
-        }
-    })
+        },
+    )
 }
 
 /// Render the UI with a table.

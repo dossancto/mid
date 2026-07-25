@@ -112,3 +112,21 @@ pub fn list_tables_mysql() -> String {
         "
     .to_string();
 }
+
+pub fn select_table_mysql(table_name: &str) -> String {
+    let table_name = table_name.replace('`', "``");
+    format!("SELECT * FROM `{table_name}`")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_table_mysql;
+
+    #[test]
+    fn quotes_table_name_as_mysql_identifier() {
+        assert_eq!(
+            select_table_mysql("user`data"),
+            "SELECT * FROM `user``data`"
+        );
+    }
+}

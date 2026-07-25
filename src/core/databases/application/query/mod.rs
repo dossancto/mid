@@ -7,7 +7,8 @@ use crate::core::{
     databases::adapters::{
         DatabaseType, mysql::query::execute_mysql_query, postgres::query::execute_postgres_query,
     },
-    globals,
+    globals::{self, get_global_history_file_path},
+    history::{HistoryRequest, add_request},
 };
 
 #[derive(Debug, Clone)]
@@ -56,7 +57,7 @@ pub async fn execute_query_on_database(
     let response = match config.get_database_type() {
         Some(database_type) => match database_type {
             DatabaseType::Postgres => {
-                let res = execute_postgres_query(active_database, options.query).await;
+                let res = execute_postgres_query(active_database, options.query.clone()).await;
 
                 if res.is_err() {
                     eprintln!("Failed to execute query on PostgreSQL: {res:?}");
@@ -66,7 +67,7 @@ pub async fn execute_query_on_database(
                 res.unwrap()
             }
             DatabaseType::MySQL => {
-                let res = execute_mysql_query(active_database, options.query).await;
+                let res = execute_mysql_query(active_database, options.query.clone()).await;
 
                 if res.is_err() {
                     eprintln!("Failed to execute query on MySQL: {res:?}");
@@ -79,10 +80,33 @@ pub async fn execute_query_on_database(
                 panic!("sqlite adapter not implemented yet");
             }
         },
-        None => {
+        _ => {
             return Err(Error::NoActiveRemoteConnection);
         }
     };
 
+    let file_path = get_global_history_file_path();
+    let history_response = add_request(
+        file_path,
+        HistoryRequest {
+            id: create_history_request_id(),
+            query: options.query,
+            database: active_database.name.clone(),
+        },
+    );
+
+    if history_response.is_err() {
+        eprintln!("Failed to save history to database",);
+    }
+
     return Ok(response);
+}
+
+fn create_history_request_id() -> String {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("System time is before UNIX epoch")
+        .as_nanos();
+
+    return timestamp.to_string();
 }

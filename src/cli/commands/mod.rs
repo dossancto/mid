@@ -1,7 +1,11 @@
 use clap::Subcommand;
 
-use crate::{cli::commands::remote::RemoteCommands, core::query::QueryOutputFormat};
+use crate::{
+    cli::commands::{history::HistoryCommands, query::QueryCommands, remote::RemoteCommands},
+    core::query::QueryOutputFormat,
+};
 
+pub mod history;
 pub mod list;
 pub mod query;
 pub mod remote;
@@ -30,10 +34,18 @@ pub enum Commands {
         output_format: Option<QueryOutputFormat>,
     },
 
+    #[command(args_conflicts_with_subcommands = true)]
     Query {
         #[arg()]
-        query: String,
+        query: Option<String>,
         #[arg(short, long)]
         output_format: Option<QueryOutputFormat>,
+        #[command(subcommand)]
+        command: Option<QueryCommands>,
+    },
+
+    History {
+        #[command(subcommand)]
+        command: Option<HistoryCommands>,
     },
 }
