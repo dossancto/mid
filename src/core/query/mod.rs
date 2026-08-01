@@ -1,6 +1,5 @@
 mod app;
 mod json;
-mod screens;
 mod table;
 
 pub use table::TableEvent;
