@@ -1,56 +1,32 @@
 use std::{
     collections::{BTreeSet, HashMap},
-    io::{self, Write},
+    io,
 };
 
+use arboard::Clipboard;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    symbols::border,
     text::Line,
-    widgets::{Block, Paragraph, Row, StatefulWidget, Table, TableState, Widget},
+    widgets::{Paragraph, Row, StatefulWidget, Table, TableState, Widget, Wrap},
 };
 
 use crate::core::{databases::application::query::DbValue, query::TableCommand};
 
-fn encode_base64(input: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut encoded = String::with_capacity(input.len().div_ceil(3) * 4);
-
-    for chunk in input.chunks(3) {
-        let first = chunk[0];
-        let second = chunk.get(1).copied().unwrap_or(0);
-        let third = chunk.get(2).copied().unwrap_or(0);
-
-        encoded.push(ALPHABET[(first >> 2) as usize] as char);
-        encoded.push(ALPHABET[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
-        encoded.push(if chunk.len() > 1 {
-            ALPHABET[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char
-        } else {
-            '='
-        });
-        encoded.push(if chunk.len() > 2 {
-            ALPHABET[(third & 0x3f) as usize] as char
-        } else {
-            '='
-        });
-    }
-
-    encoded
-}
-
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct App {
     items: Vec<HashMap<String, DbValue>>,
     commands: Vec<TableCommand>,
     query: String,
+    query_expanded: bool,
     exit: bool,
     table_state: TableState,
     column_offset: usize,
     selected_column: usize,
+    clipboard: Option<Clipboard>,
 }
 
 impl App {
@@ -69,6 +45,7 @@ impl App {
             commands,
             query,
             table_state,
+            clipboard: Clipboard::new().ok(),
             ..Self::default()
         }
     }
@@ -135,12 +112,17 @@ impl App {
             KeyCode::Char('g') => self.select_first_row(),
             KeyCode::Char('G') => self.select_last_row(),
             KeyCode::Char('y') => self.yank_selected_row(),
+            KeyCode::Char('e') => self.toggle_query_expanded(),
             _ => {}
         }
     }
 
     fn exit(&mut self) {
         self.exit = true;
+    }
+
+    fn toggle_query_expanded(&mut self) {
+        self.query_expanded = !self.query_expanded;
     }
 
     fn select_next_row(&mut self) {
@@ -208,9 +190,15 @@ impl App {
             .get(&header)
             .map(Self::format_db_value)
             .unwrap_or_else(|| "null".to_string());
-        let encoded = encode_base64(text.as_bytes());
-        print!("\x1b]52;c;{encoded}\x07");
-        let _ = io::stdout().flush();
+
+        let message = match &mut self.clipboard {
+            Some(clipboard) => match clipboard.set_text(text) {
+                Ok(()) => "Copied selected value".to_string(),
+                Err(error) => format!("Clipboard error: {error}"),
+            },
+            None => "Clipboard is unavailable".to_string(),
+        };
+        print!("{message}");
     }
 
     fn column_count(&self) -> usize {
@@ -260,19 +248,49 @@ impl Widget for &mut App {
         }
 
         // Render the UI with a table.
-        let title = Line::from("SELECT App ".bold());
-        let subtitle = Line::from(vec!["Query: ".into(), self.query.as_str().yellow()]);
+        let subtitle_lines = if self.query_expanded {
+            self.query
+                .lines()
+                .enumerate()
+                .map(|(index, line)| {
+                    Line::from(vec![
+                        if index == 0 {
+                            "Query: ".into()
+                        } else {
+                            "       ".into()
+                        },
+                        line.yellow(),
+                    ])
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![Line::from(vec![
+                "Query [e to expand]: ".into(),
+                self.query.replace(['\n', '\r'], " ").yellow(),
+            ])]
+        };
 
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(Line::from("TABLE"))
-            .border_set(border::THICK);
-        let inner = block.inner(area);
+        let available_width = usize::from(area.width.max(1));
+        let subtitle_height = if self.query_expanded {
+            subtitle_lines
+                .iter()
+                .map(|line| line.width().div_ceil(available_width).max(1))
+                .sum::<usize>()
+                .min(u16::MAX as usize) as u16
+        } else {
+            1
+        };
         let [subtitle_area, table_area] =
-            Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(inner);
+            Layout::vertical([Constraint::Length(subtitle_height), Constraint::Fill(1)])
+                .spacing(1)
+                .areas(area);
 
-        block.render(area, buf);
-        Paragraph::new(subtitle).render(subtitle_area, buf);
+        let query = Paragraph::new(subtitle_lines);
+        if self.query_expanded {
+            query.wrap(Wrap { trim: false }).render(subtitle_area, buf);
+        } else {
+            query.render(subtitle_area, buf);
+        }
 
         const COLUMN_WIDTH: u16 = 20;
         const COLUMN_SPACING: u16 = 1;
@@ -317,7 +335,7 @@ impl Widget for &mut App {
         let table = Table::new(rows, widths)
             .header(header)
             .column_spacing(COLUMN_SPACING)
-            .row_highlight_style(Style::new().reversed())
+            // .row_highlight_style(Style::new().reversed())
             .column_highlight_style(Color::DarkGray)
             .cell_highlight_style(Style::new().reversed().yellow())
             .highlight_symbol("> ");
