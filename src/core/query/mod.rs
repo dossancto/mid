@@ -20,8 +20,8 @@ pub enum QueryOutputFormat {
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum TableCommand {
-    Moviment,
-    DatabaseTable,
+    ShowValue,
+    ShowTables,
 }
 
 #[derive(Error, Debug)]
@@ -55,7 +55,7 @@ async fn execute(
         QueryOutputFormat::Table => {
             let mut app = App::new(
                 items,
-                table_command.unwrap_or(vec![TableCommand::Moviment]),
+                table_command.unwrap_or(vec![TableCommand::ShowValue]),
                 query,
             );
 

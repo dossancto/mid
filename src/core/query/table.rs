@@ -38,7 +38,7 @@ pub fn render_output_as_table(
                     )
                 })?;
                 if let Some(key) = event::read()?.as_key_press_event() {
-                    if table_commands.contains(&TableCommand::Moviment) {
+                    if table_commands.contains(&TableCommand::ShowValue) {
                         match key.code.clone() {
                             KeyCode::Char('q') | KeyCode::Esc => return Ok(None),
                             KeyCode::Char('j') | KeyCode::Down => table_state.select_next(),
@@ -55,10 +55,10 @@ pub fn render_output_as_table(
                         }
                     }
 
-                    if table_commands.contains(&TableCommand::DatabaseTable) {
+                    if table_commands.contains(&TableCommand::ShowTables) {
                         match key.code {
                             KeyCode::Enter
-                                if table_commands.contains(&TableCommand::DatabaseTable) =>
+                                if table_commands.contains(&TableCommand::ShowTables) =>
                             {
                                 let Some(selected_row) = table_state.selected() else {
                                     continue;

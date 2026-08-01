@@ -97,7 +97,7 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if !self.commands.contains(&TableCommand::Moviment) {
+        if !self.commands.contains(&TableCommand::ShowValue) {
             if key_event.code == KeyCode::Char('q') {
                 self.exit();
             }

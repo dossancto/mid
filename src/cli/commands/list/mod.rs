@@ -25,7 +25,7 @@ pub async fn handle_list_command(
     let res = handle_query_command(
         query,
         output_format.clone(),
-        Some(vec![TableCommand::Moviment, TableCommand::DatabaseTable]),
+        Some(vec![TableCommand::ShowValue, TableCommand::ShowTables]),
     )
     .await;
 
@@ -40,7 +40,7 @@ pub async fn handle_list_command(
                     }
                 };
                 let result =
-                    handle_query_command(query, output_format, Some(vec![TableCommand::Moviment]))
+                    handle_query_command(query, output_format, Some(vec![TableCommand::ShowValue]))
                         .await;
 
                 if let Err(e) = result {
