@@ -111,12 +111,18 @@ impl App {
             KeyCode::Char('G') => self.select_last_row(),
             KeyCode::Char('y') => self.yank_selected_row(),
             KeyCode::Char('e') => self.toggle_query_expanded(),
+            KeyCode::Char('p') => self.edit_query(),
             KeyCode::Enter => match self.command {
                 TableCommand::ShowTables => self.select_table(),
                 TableCommand::ShowValue => self.toggle_value_expanded(),
             },
             _ => {}
         }
+    }
+
+    fn edit_query(&mut self) {
+        self.event = Some(TableEvent::EditQuery(self.query.clone()));
+        self.exit();
     }
 
     fn select_table(&mut self) {
@@ -130,10 +136,7 @@ impl App {
             return;
         };
 
-        self.event = Some(TableEvent {
-            key_code: KeyCode::Enter,
-            value: Some(table_name),
-        });
+        self.event = Some(TableEvent::SelectTable(table_name));
         self.exit();
     }
 
