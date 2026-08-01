@@ -62,13 +62,16 @@ async fn execute(
         QueryOutputFormat::Table => {
             let command = table_command.unwrap_or_default();
             let mut current_query = query;
-            let items = query::execute_query_on_database(query::RunQueryOnDatabaseCommandOptions {
-                query: current_query.clone(),
-            })
-            .await?;
-            let mut app = App::new(items, command, current_query.clone());
+            let mut app = App::new(Vec::new(), command, current_query.clone());
 
             loop {
+                let items =
+                    query::execute_query_on_database(query::RunQueryOnDatabaseCommandOptions {
+                        query: current_query.clone(),
+                    })
+                    .await?;
+                app.update_query_results(items, current_query.clone());
+
                 let event =
                     ratatui::run(|terminal| app.run(terminal)).map_err(color_eyre::Report::from)?;
 
@@ -78,13 +81,6 @@ async fn execute(
                             return Ok(None);
                         };
                         current_query = edited_query;
-                        let items = query::execute_query_on_database(
-                            query::RunQueryOnDatabaseCommandOptions {
-                                query: current_query.clone(),
-                            },
-                        )
-                        .await?;
-                        app.update_query_results(items, current_query.clone());
                     }
                     event => return Ok(event),
                 }
