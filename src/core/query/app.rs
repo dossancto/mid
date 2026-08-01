@@ -1,0 +1,330 @@
+use std::{
+    collections::{BTreeSet, HashMap},
+    io::{self, Write},
+};
+
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    DefaultTerminal, Frame,
+    buffer::Buffer,
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Style, Stylize},
+    symbols::border,
+    text::Line,
+    widgets::{Block, Paragraph, Row, StatefulWidget, Table, TableState, Widget},
+};
+
+use crate::core::{databases::application::query::DbValue, query::TableCommand};
+
+fn encode_base64(input: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(input.len().div_ceil(3) * 4);
+
+    for chunk in input.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+
+        encoded.push(ALPHABET[(first >> 2) as usize] as char);
+        encoded.push(ALPHABET[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            ALPHABET[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            ALPHABET[(third & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+
+    encoded
+}
+
+#[derive(Debug, Default)]
+pub struct App {
+    items: Vec<HashMap<String, DbValue>>,
+    commands: Vec<TableCommand>,
+    query: String,
+    exit: bool,
+    table_state: TableState,
+    column_offset: usize,
+    selected_column: usize,
+}
+
+impl App {
+    pub fn new(
+        items: Vec<HashMap<String, DbValue>>,
+        commands: Vec<TableCommand>,
+        query: String,
+    ) -> Self {
+        let mut table_state = TableState::default();
+        if !items.is_empty() {
+            table_state.select_first();
+        }
+
+        Self {
+            items,
+            commands,
+            query,
+            table_state,
+            ..Self::default()
+        }
+    }
+
+    fn format_db_value(value: &DbValue) -> String {
+        match value {
+            DbValue::Null => "null".to_string(),
+            DbValue::Text(value) => value.clone(),
+            DbValue::TextArray(values) => {
+                format!("{{{}}}", values.join(","))
+            }
+            DbValue::Numeric(value) => value.clone(),
+            DbValue::Integer(value) => value.to_string(),
+            DbValue::Float(value) => {
+                if value.is_finite() {
+                    value.to_string()
+                } else {
+                    "null".to_string()
+                }
+            }
+            DbValue::Boolean(value) => value.to_string(),
+        }
+    }
+
+    /// runs the application's main loop until the user quits
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
+        }
+        Ok(())
+    }
+
+    fn draw(&mut self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
+    }
+
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            // it's important to check that the event is a key press event as
+            // crossterm also emits key release and repeat events on Windows.
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if !self.commands.contains(&TableCommand::Moviment) {
+            if key_event.code == KeyCode::Char('q') {
+                self.exit();
+            }
+            return;
+        }
+
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            KeyCode::Down | KeyCode::Char('j') => self.select_next_row(),
+            KeyCode::Up | KeyCode::Char('k') => self.select_previous_row(),
+            KeyCode::Right | KeyCode::Char('l') => self.select_next_column(),
+            KeyCode::Left | KeyCode::Char('h') => self.select_previous_column(),
+            KeyCode::Char('g') => self.select_first_row(),
+            KeyCode::Char('G') => self.select_last_row(),
+            KeyCode::Char('y') => self.yank_selected_row(),
+            _ => {}
+        }
+    }
+
+    fn exit(&mut self) {
+        self.exit = true;
+    }
+
+    fn select_next_row(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
+
+        let current_row = self.table_state.selected().unwrap_or(0);
+        let last_row = self.items.len().saturating_sub(1);
+        self.table_state
+            .select(Some(current_row.saturating_add(1).min(last_row)));
+    }
+
+    fn select_previous_row(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
+
+        let current_row = self.table_state.selected().unwrap_or(0);
+        self.table_state.select(Some(current_row.saturating_sub(1)));
+    }
+
+    fn select_next_column(&mut self) {
+        let last_column = self.column_count().saturating_sub(1);
+        self.selected_column = self.selected_column.saturating_add(1).min(last_column);
+    }
+
+    fn select_previous_column(&mut self) {
+        self.selected_column = self.selected_column.saturating_sub(1);
+    }
+
+    fn select_first_row(&mut self) {
+        if !self.items.is_empty() {
+            self.table_state.select_first();
+        }
+    }
+
+    fn select_last_row(&mut self) {
+        if !self.items.is_empty() {
+            self.table_state.select_last();
+        }
+    }
+
+    fn yank_selected_row(&mut self) {
+        let Some(row) = self
+            .table_state
+            .selected()
+            .and_then(|selected| self.items.get(selected))
+        else {
+            return;
+        };
+
+        let Some(header) = self
+            .items
+            .iter()
+            .flat_map(|row| row.keys().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .nth(self.selected_column)
+        else {
+            return;
+        };
+
+        let text = row
+            .get(&header)
+            .map(Self::format_db_value)
+            .unwrap_or_else(|| "null".to_string());
+        let encoded = encode_base64(text.as_bytes());
+        print!("\x1b]52;c;{encoded}\x07");
+        let _ = io::stdout().flush();
+    }
+
+    fn column_count(&self) -> usize {
+        self.items
+            .iter()
+            .flat_map(|row| row.keys())
+            .collect::<BTreeSet<_>>()
+            .len()
+            .max(1)
+    }
+}
+
+impl Widget for &mut App {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        fn items_to_rows_elements(
+            items: &[HashMap<String, DbValue>],
+        ) -> (Vec<String>, Vec<Vec<String>>) {
+            let headers: Vec<String> = items
+                .iter()
+                .flat_map(|row| row.keys().cloned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+
+            if headers.is_empty() {
+                return (
+                    vec!["result".to_string()],
+                    vec![vec!["No rows".to_string()]],
+                );
+            }
+
+            let rows = items
+                .iter()
+                .map(|row| {
+                    headers
+                        .iter()
+                        .map(|header| {
+                            row.get(header)
+                                .map(App::format_db_value)
+                                .unwrap_or_else(|| "null".to_string())
+                        })
+                        .collect::<Vec<String>>()
+                })
+                .collect::<Vec<Vec<String>>>();
+
+            (headers, rows)
+        }
+
+        // Render the UI with a table.
+        let title = Line::from("SELECT App ".bold());
+        let subtitle = Line::from(vec!["Query: ".into(), self.query.as_str().yellow()]);
+
+        let block = Block::bordered()
+            .title(title.centered())
+            .title_bottom(Line::from("TABLE"))
+            .border_set(border::THICK);
+        let inner = block.inner(area);
+        let [subtitle_area, table_area] =
+            Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(inner);
+
+        block.render(area, buf);
+        Paragraph::new(subtitle).render(subtitle_area, buf);
+
+        const COLUMN_WIDTH: u16 = 20;
+        const COLUMN_SPACING: u16 = 1;
+
+        let (headers, row_values) = items_to_rows_elements(&self.items);
+        self.selected_column = self.selected_column.min(headers.len().saturating_sub(1));
+
+        let visible_columns = ((table_area.width.saturating_add(COLUMN_SPACING))
+            / (COLUMN_WIDTH + COLUMN_SPACING))
+            .max(1) as usize;
+
+        if self.selected_column < self.column_offset {
+            self.column_offset = self.selected_column;
+        } else if self.selected_column >= self.column_offset + visible_columns {
+            self.column_offset = self
+                .selected_column
+                .saturating_add(1)
+                .saturating_sub(visible_columns);
+        }
+
+        self.column_offset = self
+            .column_offset
+            .min(headers.len().saturating_sub(visible_columns));
+        let visible_end = (self.column_offset + visible_columns).min(headers.len());
+        let visible_headers = headers[self.column_offset..visible_end].to_vec();
+
+        let header = Row::new(visible_headers.clone())
+            .style(Style::new().bold())
+            .bottom_margin(1);
+        let rows = row_values.into_iter().map(|row| {
+            Row::new(
+                row.into_iter()
+                    .skip(self.column_offset)
+                    .take(visible_columns)
+                    .collect::<Vec<_>>(),
+            )
+        });
+        let widths = visible_headers
+            .iter()
+            .map(|_| Constraint::Length(COLUMN_WIDTH))
+            .collect::<Vec<_>>();
+        let table = Table::new(rows, widths)
+            .header(header)
+            .column_spacing(COLUMN_SPACING)
+            .row_highlight_style(Style::new().reversed())
+            .column_highlight_style(Color::DarkGray)
+            .cell_highlight_style(Style::new().reversed().yellow())
+            .highlight_symbol("> ");
+
+        self.table_state.select_column(Some(
+            self.selected_column.saturating_sub(self.column_offset),
+        ));
+        StatefulWidget::render(table, table_area, buf, &mut self.table_state);
+    }
+}

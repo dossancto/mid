@@ -1,4 +1,6 @@
+mod app;
 mod json;
+mod screens;
 mod table;
 
 pub use table::TableEvent;
@@ -8,7 +10,7 @@ use thiserror::Error;
 
 use crate::core::{
     databases::application::query,
-    query::{json::render_output_as_json, table::render_output_as_table},
+    query::{app::App, json::render_output_as_json},
 };
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -45,21 +47,25 @@ async fn execute(
     options: QueryOutputFormat,
     table_command: Option<Vec<TableCommand>>,
 ) -> Result<Option<TableEvent>, Error> {
-    let items =
-        query::execute_query_on_database(query::RunQueryOnDatabaseCommandOptions { query: query })
-            .await?;
+    let items = query::execute_query_on_database(query::RunQueryOnDatabaseCommandOptions {
+        query: query.clone(),
+    })
+    .await?;
 
     match options {
         QueryOutputFormat::Table => {
-            return Ok(render_output_as_table(
+            let mut app = App::new(
                 items,
                 table_command.unwrap_or(vec![TableCommand::Moviment]),
-            )?);
+                query,
+            );
+
+            ratatui::run(|terminal| app.run(terminal)).map_err(color_eyre::Report::from)?;
+            Ok(None)
         }
         QueryOutputFormat::Json => {
             render_output_as_json(items);
+            Ok(None)
         }
     }
-
-    return Ok(None);
 }
