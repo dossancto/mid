@@ -15,7 +15,7 @@ use ratatui::{
 };
 
 use crate::core::{
-    databases::application::query::DbValue,
+    databases::application::{query::DbValue, tables::update::update_database_table},
     query::{TableCommand, TableEvent},
 };
 
@@ -124,6 +124,9 @@ impl App {
             KeyCode::Char('g') => self.select_first_row(),
             KeyCode::Char('G') => self.select_last_row(),
             KeyCode::Char('y') => self.yank_selected_row(),
+            KeyCode::Char('u') if self.command == TableCommand::ShowValue => {
+                self.update_selected_value()
+            }
             KeyCode::Char('e') => self.toggle_query_expanded(),
             KeyCode::Char('p') => self.edit_query(),
             KeyCode::Enter => match self.command {
@@ -137,6 +140,77 @@ impl App {
     fn edit_query(&mut self) {
         self.event = Some(TableEvent::EditQuery(self.query.clone()));
         self.exit();
+    }
+
+    fn update_selected_value(&mut self) {
+        let Some(selected_row) = self
+            .table_state
+            .selected()
+            .and_then(|selected| self.items.get(selected))
+        else {
+            return;
+        };
+        let Some(column) = self.selected_column_name() else {
+            return;
+        };
+        let Some(value) = selected_row.get(&column) else {
+            return;
+        };
+        let Some(id_column) = self.first_column_name() else {
+            return;
+        };
+        let Some(id) = selected_row.get(&id_column) else {
+            return;
+        };
+        let Some(table) = Self::table_from_query(&self.query) else {
+            return;
+        };
+        let Ok(update_query) = update_database_table(&table, &id_column, id, &column, value) else {
+            return;
+        };
+        self.event = Some(TableEvent::UpdateValue(update_query));
+        self.exit();
+    }
+
+    fn table_from_query(query: &str) -> Option<String> {
+        let words = query.split_whitespace().collect::<Vec<_>>();
+        let from = words
+            .iter()
+            .position(|word| word.eq_ignore_ascii_case("FROM"))?;
+        words.get(from + 1).map(|table| {
+            let table = table.trim_end_matches(|character| character == ';' || character == ',');
+            if let Some(table) = table
+                .strip_prefix('"')
+                .and_then(|table| table.strip_suffix('"'))
+            {
+                table.replace("\"\"", "\"")
+            } else if let Some(table) = table
+                .strip_prefix('`')
+                .and_then(|table| table.strip_suffix('`'))
+            {
+                table.replace("``", "`")
+            } else {
+                table.to_string()
+            }
+        })
+    }
+
+    fn selected_column_name(&self) -> Option<String> {
+        self.items
+            .iter()
+            .flat_map(|row| row.keys().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .nth(self.selected_column)
+    }
+
+    fn first_column_name(&self) -> Option<String> {
+        self.items
+            .iter()
+            .flat_map(|row| row.keys().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .next()
     }
 
     fn select_table(&mut self) {
@@ -233,14 +307,7 @@ impl App {
             return None;
         };
 
-        let Some(header) = self
-            .items
-            .iter()
-            .flat_map(|row| row.keys().cloned())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .nth(self.selected_column)
-        else {
+        let Some(header) = self.selected_column_name() else {
             return None;
         };
 

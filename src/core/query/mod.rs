@@ -4,6 +4,7 @@ mod json;
 #[derive(Debug, Clone)]
 pub enum TableEvent {
     EditQuery(String),
+    UpdateValue(String),
     SelectTable(String),
 }
 
@@ -81,6 +82,19 @@ async fn execute(
                             return Ok(None);
                         };
                         current_query = edited_query;
+                    }
+                    Some(TableEvent::UpdateValue(update_query)) => {
+                        let Some(update_query) = edit_query(&update_query)? else {
+                            continue;
+                        };
+                        if !update_query.trim().is_empty() {
+                            query::execute_query_on_database(
+                                query::RunQueryOnDatabaseCommandOptions {
+                                    query: update_query,
+                                },
+                            )
+                            .await?;
+                        }
                     }
                     event => return Ok(event),
                 }
