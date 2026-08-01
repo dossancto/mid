@@ -14,12 +14,15 @@ use ratatui::{
     widgets::{Paragraph, Row, StatefulWidget, Table, TableState, Widget, Wrap},
 };
 
-use crate::core::{databases::application::query::DbValue, query::TableCommand};
+use crate::core::{
+    databases::application::query::DbValue,
+    query::{TableCommand, TableEvent},
+};
 
 #[derive(Default)]
 pub struct App {
     items: Vec<HashMap<String, DbValue>>,
-    commands: Vec<TableCommand>,
+    command: TableCommand,
     query: String,
     query_expanded: bool,
     value_expanded: bool,
@@ -28,14 +31,11 @@ pub struct App {
     column_offset: usize,
     selected_column: usize,
     clipboard: Option<Clipboard>,
+    event: Option<TableEvent>,
 }
 
 impl App {
-    pub fn new(
-        items: Vec<HashMap<String, DbValue>>,
-        commands: Vec<TableCommand>,
-        query: String,
-    ) -> Self {
+    pub fn new(items: Vec<HashMap<String, DbValue>>, command: TableCommand, query: String) -> Self {
         let mut table_state = TableState::default();
         if !items.is_empty() {
             table_state.select_first();
@@ -43,7 +43,7 @@ impl App {
 
         Self {
             items,
-            commands,
+            command,
             query,
             table_state,
             clipboard: Clipboard::new().ok(),
@@ -72,12 +72,12 @@ impl App {
     }
 
     /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<Option<TableEvent>> {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
         }
-        Ok(())
+        Ok(self.event.take())
     }
 
     fn draw(&mut self, frame: &mut Frame) {
@@ -97,15 +97,12 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if !self.commands.contains(&TableCommand::ShowValue) {
-            if key_event.code == KeyCode::Char('q') {
-                self.exit();
-            }
+        if key_event.code == KeyCode::Char('q') {
+            self.exit();
             return;
         }
 
         match key_event.code {
-            KeyCode::Char('q') => self.exit(),
             KeyCode::Down | KeyCode::Char('j') => self.select_next_row(),
             KeyCode::Up | KeyCode::Char('k') => self.select_previous_row(),
             KeyCode::Right | KeyCode::Char('l') => self.select_next_column(),
@@ -114,9 +111,30 @@ impl App {
             KeyCode::Char('G') => self.select_last_row(),
             KeyCode::Char('y') => self.yank_selected_row(),
             KeyCode::Char('e') => self.toggle_query_expanded(),
-            KeyCode::Enter => self.toggle_value_expanded(),
+            KeyCode::Enter => match self.command {
+                TableCommand::ShowTables => self.select_table(),
+                TableCommand::ShowValue => self.toggle_value_expanded(),
+            },
             _ => {}
         }
+    }
+
+    fn select_table(&mut self) {
+        let Some(table_name) = self
+            .table_state
+            .selected()
+            .and_then(|selected| self.items.get(selected))
+            .and_then(|row| row.get("table_name"))
+            .map(Self::format_db_value)
+        else {
+            return;
+        };
+
+        self.event = Some(TableEvent {
+            key_code: KeyCode::Enter,
+            value: Some(table_name),
+        });
+        self.exit();
     }
 
     fn exit(&mut self) {

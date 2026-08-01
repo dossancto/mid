@@ -18,8 +18,9 @@ pub enum QueryOutputFormat {
     Json,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum TableCommand {
+    #[default]
     ShowValue,
     ShowTables,
 }
@@ -36,15 +37,15 @@ pub enum Error {
 pub async fn handle_query_command(
     query: String,
     options: QueryOutputFormat,
-    table_commands: Option<Vec<TableCommand>>,
+    table_command: Option<TableCommand>,
 ) -> Result<Option<TableEvent>, Error> {
-    return Ok(execute(query, options, table_commands).await?);
+    return Ok(execute(query, options, table_command).await?);
 }
 
 async fn execute(
     query: String,
     options: QueryOutputFormat,
-    table_command: Option<Vec<TableCommand>>,
+    table_command: Option<TableCommand>,
 ) -> Result<Option<TableEvent>, Error> {
     let items = query::execute_query_on_database(query::RunQueryOnDatabaseCommandOptions {
         query: query.clone(),
@@ -53,14 +54,11 @@ async fn execute(
 
     match options {
         QueryOutputFormat::Table => {
-            let mut app = App::new(
-                items,
-                table_command.unwrap_or(vec![TableCommand::ShowValue]),
-                query,
-            );
+            let mut app = App::new(items, table_command.unwrap_or_default(), query);
 
-            ratatui::run(|terminal| app.run(terminal)).map_err(color_eyre::Report::from)?;
-            Ok(None)
+            let event =
+                ratatui::run(|terminal| app.run(terminal)).map_err(color_eyre::Report::from)?;
+            Ok(event)
         }
         QueryOutputFormat::Json => {
             render_output_as_json(items);

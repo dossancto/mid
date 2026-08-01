@@ -22,12 +22,8 @@ pub async fn handle_list_command(
     let res = tables::list::list_database_tables();
 
     let query = res.unwrap_or_default();
-    let res = handle_query_command(
-        query,
-        output_format.clone(),
-        Some(vec![TableCommand::ShowValue, TableCommand::ShowTables]),
-    )
-    .await;
+    let res =
+        handle_query_command(query, output_format.clone(), Some(TableCommand::ShowTables)).await;
 
     match res {
         Ok(Some(event)) if event.key_code == KeyCode::Enter => {
@@ -40,8 +36,7 @@ pub async fn handle_list_command(
                     }
                 };
                 let result =
-                    handle_query_command(query, output_format, Some(vec![TableCommand::ShowValue]))
-                        .await;
+                    handle_query_command(query, output_format, Some(TableCommand::ShowValue)).await;
 
                 if let Err(e) = result {
                     eprintln!("[List] Failed to query selected table: {e}");
