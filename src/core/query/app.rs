@@ -22,6 +22,7 @@ pub struct App {
     commands: Vec<TableCommand>,
     query: String,
     query_expanded: bool,
+    value_expanded: bool,
     exit: bool,
     table_state: TableState,
     column_offset: usize,
@@ -113,6 +114,7 @@ impl App {
             KeyCode::Char('G') => self.select_last_row(),
             KeyCode::Char('y') => self.yank_selected_row(),
             KeyCode::Char('e') => self.toggle_query_expanded(),
+            KeyCode::Enter => self.toggle_value_expanded(),
             _ => {}
         }
     }
@@ -123,6 +125,12 @@ impl App {
 
     fn toggle_query_expanded(&mut self) {
         self.query_expanded = !self.query_expanded;
+    }
+
+    fn toggle_value_expanded(&mut self) {
+        if self.selected_value().is_some() {
+            self.value_expanded = !self.value_expanded;
+        }
     }
 
     fn select_next_row(&mut self) {
@@ -167,12 +175,27 @@ impl App {
     }
 
     fn yank_selected_row(&mut self) {
+        let Some(text) = self.selected_value() else {
+            return;
+        };
+
+        let message = match &mut self.clipboard {
+            Some(clipboard) => match clipboard.set_text(text) {
+                Ok(()) => "Copied selected value".to_string(),
+                Err(error) => format!("Clipboard error: {error}"),
+            },
+            None => "Clipboard is unavailable".to_string(),
+        };
+        print!("{message}");
+    }
+
+    fn selected_value(&self) -> Option<String> {
         let Some(row) = self
             .table_state
             .selected()
             .and_then(|selected| self.items.get(selected))
         else {
-            return;
+            return None;
         };
 
         let Some(header) = self
@@ -183,22 +206,14 @@ impl App {
             .into_iter()
             .nth(self.selected_column)
         else {
-            return;
+            return None;
         };
 
-        let text = row
-            .get(&header)
-            .map(Self::format_db_value)
-            .unwrap_or_else(|| "null".to_string());
-
-        let message = match &mut self.clipboard {
-            Some(clipboard) => match clipboard.set_text(text) {
-                Ok(()) => "Copied selected value".to_string(),
-                Err(error) => format!("Clipboard error: {error}"),
-            },
-            None => "Clipboard is unavailable".to_string(),
-        };
-        print!("{message}");
+        Some(
+            row.get(&header)
+                .map(Self::format_db_value)
+                .unwrap_or_else(|| "null".to_string()),
+        )
     }
 
     fn column_count(&self) -> usize {
@@ -280,16 +295,34 @@ impl Widget for &mut App {
         } else {
             1
         };
-        let [subtitle_area, table_area] =
-            Layout::vertical([Constraint::Length(subtitle_height), Constraint::Fill(1)])
-                .spacing(1)
-                .areas(area);
+
+        let expanded_value = self.value_expanded.then(|| self.selected_value()).flatten();
+        let value_line = expanded_value
+            .as_deref()
+            .map(|value| Line::from(vec!["Value [Enter to collapse]: ".into(), value.cyan()]));
+        let value_height = value_line
+            .as_ref()
+            .map(|line| line.width().div_ceil(available_width).max(1))
+            .unwrap_or(0)
+            .min(u16::MAX as usize) as u16;
+
+        let [subtitle_area, value_area, table_area] = Layout::vertical([
+            Constraint::Length(subtitle_height),
+            Constraint::Length(value_height),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
 
         let query = Paragraph::new(subtitle_lines);
         if self.query_expanded {
             query.wrap(Wrap { trim: false }).render(subtitle_area, buf);
         } else {
             query.render(subtitle_area, buf);
+        }
+        if let Some(value_line) = value_line {
+            Paragraph::new(value_line)
+                .wrap(Wrap { trim: false })
+                .render(value_area, buf);
         }
 
         const COLUMN_WIDTH: u16 = 20;
