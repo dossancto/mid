@@ -51,6 +51,20 @@ impl App {
         }
     }
 
+    pub fn update_query_results(&mut self, items: Vec<HashMap<String, DbValue>>, query: String) {
+        self.items = items;
+        self.query = query;
+        self.exit = false;
+        self.event = None;
+        self.value_expanded = false;
+        self.column_offset = 0;
+        self.selected_column = 0;
+        self.table_state = TableState::default();
+        if !self.items.is_empty() {
+            self.table_state.select_first();
+        }
+    }
+
     fn format_db_value(value: &DbValue) -> String {
         match value {
             DbValue::Null => "null".to_string(),
