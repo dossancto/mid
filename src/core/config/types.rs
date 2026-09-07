@@ -16,6 +16,8 @@ pub struct MidConfigFile {
 pub struct DatabaseConfig {
     pub name: String,
     pub connection_string: String,
+    #[serde(default)]
+    pub is_secure: bool,
 }
 
 impl DatabaseConfig {
@@ -28,9 +30,9 @@ impl DatabaseConfig {
 
         match database_type {
             "postgres" | "postgresql" => {
-                Ok(DatabaseType::Postgres(PostgresHandler::new(self.clone())))
+                Ok(DatabaseType::Postgres(PostgresHandler::new(self.clone())?))
             }
-            "mysql" => Ok(DatabaseType::MySQL(MySqlHandler::new(self.clone()))),
+            "mysql" => Ok(DatabaseType::MySQL(MySqlHandler::new(self.clone())?)),
             "sqlite" => Ok(DatabaseType::SQLite()),
             _ => Err(Error::DatabaseTypeNotFound),
         }
@@ -76,12 +78,12 @@ impl MidConfigFile {
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres(
                 crate::core::databases::adapters::postgres::postgres_handler::PostgresHandler::new(
                     active_db.clone(),
-                ),
+                )?,
             )),
             "mysql" => Ok(DatabaseType::MySQL(
                 crate::core::databases::adapters::mysql::mysql_handler::MySqlHandler::new(
                     active_db.clone(),
-                ),
+                )?,
             )),
             "sqlite" => Ok(DatabaseType::SQLite()),
             _ => Err(Error::DatabaseTypeNotFound),

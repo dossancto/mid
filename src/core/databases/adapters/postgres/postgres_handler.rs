@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::core::{
     config::types::DatabaseConfig,
     databases::adapters::database_type::{DatabaseHandler, DbValue, Error, QueryResult},
+    secret::secret_manager::SecretManager,
 };
 
 use super::methods::{
@@ -18,8 +19,13 @@ pub struct PostgresHandler {
 }
 
 impl PostgresHandler {
-    pub fn new(config: DatabaseConfig) -> Self {
-        Self { config }
+    pub fn new(mut config: DatabaseConfig) -> Result<Self, Error> {
+        if config.is_secure {
+            config.connection_string = SecretManager::new(config.name.clone())
+                .get_password()
+                .map_err(|_| Error::SecretUnavailable)?;
+        }
+        Ok(Self { config })
     }
 }
 

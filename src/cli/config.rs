@@ -97,6 +97,9 @@ pub enum RemoteCommands {
 
         #[arg(short = 't', long)]
         database_type: Option<String>,
+
+        #[arg(short = 's', long)]
+        is_secure: bool,
     },
     Remove {
         #[arg(add = ArgValueCompleter::new(complete_remotes))]

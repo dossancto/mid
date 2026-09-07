@@ -33,6 +33,8 @@ impl fmt::Display for DatabaseType {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Failed to retrieve the secure connection string from the OS secret manager")]
+    SecretUnavailable,
     #[error("Failed to execute query: {0}")]
     SqlError(#[from] sqlx::Error),
 

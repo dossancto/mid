@@ -1,11 +1,26 @@
+use thiserror::Error;
+
 use crate::{
     app::remote_add_screen::RemoteAddScreen,
     core::{
         config::{manage, types::DatabaseConfig},
         editor::open_editor::{open_editor_in_file, open_editor_recover_text},
         globals::get_global_config_file_path,
+        secret::secret_manager::SecretManager,
     },
 };
+
+#[derive(Error, Debug)]
+enum Error {
+    #[error("Invalid connection URL or password encoding")]
+    InvalidConnection,
+
+    #[error("Connection URL must contain a password")]
+    MissingPassword,
+
+    #[error("database type not supported")]
+    DatabaseTypeNotSupported,
+}
 
 pub fn edit() {
     let file_path = get_global_config_file_path();
@@ -53,8 +68,13 @@ pub fn switch(name: &str) {
     return;
 }
 
-pub fn add(name: &str, connection_string: Option<&str>, database_type: Option<&str>) {
-    let connection_string = match connection_string {
+pub fn add(
+    name: &str,
+    connection_string: Option<&str>,
+    database_type: Option<&str>,
+    is_secure: bool,
+) {
+    let mut connection_string = match connection_string {
         Some(connection_string) => connection_string.to_owned(),
         None if database_type.is_some() => {
             let template = match database_type {
@@ -93,17 +113,80 @@ pub fn add(name: &str, connection_string: Option<&str>, database_type: Option<&s
         }
     };
 
+    if is_secure {
+        let sanitized = match sanitize_connection_string(&connection_string) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("Error to extract password: {error}");
+                return;
+            }
+        };
+        if SecretManager::new(name.to_owned())
+            .save_password(connection_string.clone())
+            .is_err()
+        {
+            eprintln!("Failed to save remote password in the os manager");
+            return;
+        }
+        connection_string = sanitized;
+    }
+
     let file_path = get_global_config_file_path();
     let res = manage::add_database(
         file_path.to_owned(),
         DatabaseConfig {
             name: name.to_owned(),
             connection_string,
+            is_secure,
         },
     );
 
     match res {
         Ok(_) => println!("Remote config added successfully. Database: {}", name),
         Err(e) => eprintln!("Failed to add remote config: {e}"),
+    }
+}
+
+fn sanitize_connection_string(connection_string: &str) -> Result<String, Error> {
+    let mut url = url::Url::parse(connection_string).map_err(|_| Error::InvalidConnection)?;
+    match url.scheme() {
+        "mysql" | "postgres" | "postgresql" => {}
+        _ => return Err(Error::DatabaseTypeNotSupported),
+    }
+    // Query parameters may override URL credentials in database drivers.
+    if url.query_pairs().any(|(key, _)| key == "password") {
+        return Err(Error::InvalidConnection);
+    }
+    url.password().ok_or(Error::MissingPassword)?;
+    url.set_password(None)
+        .map_err(|_| Error::InvalidConnection)?;
+    Ok(url.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_decoded_password_and_preserves_connection_details() {
+        for scheme in ["mysql", "postgres", "postgresql"] {
+            let url = sanitize_connection_string(&format!(
+                "{scheme}://user:pass%23%40%3A%25@[::1]:5432/db?sslmode=require"
+            ))
+            .unwrap();
+            assert_eq!(
+                url,
+                format!("{scheme}://user@[::1]:5432/db?sslmode=require")
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_password_and_query_credentials() {
+        assert!(sanitize_connection_string("mysql://user@localhost/db").is_err());
+        assert!(
+            sanitize_connection_string("mysql://user:secret@localhost/db?password=other").is_err()
+        );
+        assert!(sanitize_connection_string("sqlite://localhost/db").is_err());
     }
 }
