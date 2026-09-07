@@ -24,8 +24,7 @@ pub fn list() {
 }
 
 pub fn last() {
-    let config_file_path = core::globals::get_global_config_file_path();
-    let config = match core::config::manage::read_config(config_file_path) {
+    let config = match core::config::manage::read_config() {
         Ok(config) => config,
         Err(e) => {
             eprintln!("Failed to read config: {e}");

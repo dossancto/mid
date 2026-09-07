@@ -1,6 +1,5 @@
 use crate::core::config::manage;
 use crate::core::databases::adapters::database_type::{DatabaseHandler, Error};
-use crate::core::globals;
 use crate::core::query::{QueryOutputFormat, TableEvent};
 use crate::core::query::{TableCommand, handler::handle_query_command};
 
@@ -13,9 +12,7 @@ pub async fn list(
         return Ok(());
     }
 
-    let file_path = globals::get_global_config_file_path();
-
-    let config = manage::read_config(file_path)?;
+    let config = manage::read_config()?;
     let database = config.get_database_type()?;
 
     let query = database.list_tables();
@@ -36,8 +33,7 @@ async fn handle_selected_table(
     table_name: &str,
     output_format: &QueryOutputFormat,
 ) -> Result<(), Error> {
-    let file_path = globals::get_global_config_file_path();
-    let config = manage::read_config(file_path)?;
+    let config = manage::read_config()?;
     let database = config.get_database_type()?;
     let query = database.select(table_name);
 

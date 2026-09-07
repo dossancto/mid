@@ -31,7 +31,6 @@ use super::keybinds_events::KeybindEvents;
 use crate::core::{
     config::manage,
     databases::adapters::database_type::{DatabaseHandler, DbValue, QueryResult},
-    globals,
     query::{TableCommand, TableEvent},
 };
 
@@ -381,8 +380,7 @@ impl QueryScreen {
             return;
         };
 
-        let file_path = globals::get_global_config_file_path();
-        let config = manage::read_config(file_path).unwrap();
+        let config = manage::read_config().unwrap();
         let database = config.get_database_type().unwrap();
         let update_query = database.update(
             &table,
@@ -413,8 +411,7 @@ impl QueryScreen {
             selected_by_row.entry(row).or_default().push(column);
         }
 
-        let file_path = globals::get_global_config_file_path();
-        let config = manage::read_config(file_path).unwrap();
+        let config = manage::read_config().unwrap();
         let database = config.get_database_type().unwrap();
 
         let mut queries = Vec::new();

@@ -1,6 +1,8 @@
 use std::{fs, io};
 use thiserror::Error;
 
+use crate::core::globals::get_global_config_file_path;
+
 use super::types::{DatabaseConfig, MidConfigFile};
 
 #[derive(Error, Debug)]
@@ -24,7 +26,8 @@ pub enum Error {
     DatabaseInUseCannotBeRemoved(String),
 }
 
-pub fn read_config(file_path: String) -> Result<MidConfigFile, Error> {
+pub fn read_config() -> Result<MidConfigFile, Error> {
+    let file_path = get_global_config_file_path();
     let contents = match fs::read_to_string(file_path) {
         Ok(contents) => contents,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(MidConfigFile::default()),
@@ -36,15 +39,16 @@ pub fn read_config(file_path: String) -> Result<MidConfigFile, Error> {
     return Ok(config);
 }
 
-pub fn save_config(file_path: String, content: MidConfigFile) -> Result<(), Error> {
+pub fn save_config(content: MidConfigFile) -> Result<(), Error> {
+    let file_path = get_global_config_file_path();
     let config_string = toml::to_string_pretty(&content)?;
     fs::write(file_path, config_string)?;
 
     return Ok(());
 }
 
-pub fn add_database(file_path: String, database: DatabaseConfig) -> Result<(), Error> {
-    let mut config = read_config(file_path.clone())?;
+pub fn add_database(database: DatabaseConfig) -> Result<(), Error> {
+    let mut config = read_config()?;
 
     if config.connection_exists(&database.name) {
         return Err(Error::DatabaseAlreadyExists(database.name));
@@ -52,13 +56,13 @@ pub fn add_database(file_path: String, database: DatabaseConfig) -> Result<(), E
 
     config.databases.push(database);
 
-    save_config(file_path, config)?;
+    save_config(config)?;
 
     return Ok(());
 }
 
-pub fn remove_database(file_path: String, name: String) -> Result<(), Error> {
-    let mut config = read_config(file_path.clone())?;
+pub fn remove_database(name: String) -> Result<(), Error> {
+    let mut config = read_config()?;
 
     if !config.connection_exists(&name) {
         return Err(Error::DatabaseNotFound(name));
@@ -70,13 +74,13 @@ pub fn remove_database(file_path: String, name: String) -> Result<(), Error> {
 
     config.databases.retain(|database| database.name != name);
 
-    save_config(file_path, config)?;
+    save_config(config)?;
 
     return Ok(());
 }
 
-pub fn retrieve_database(file_path: String, name: String) -> Result<DatabaseConfig, Error> {
-    let config = read_config(file_path)?;
+pub fn retrieve_database(name: String) -> Result<DatabaseConfig, Error> {
+    let config = read_config()?;
 
     if !config.connection_exists(&name) {
         return Err(Error::DatabaseNotFound(name));
@@ -86,13 +90,13 @@ pub fn retrieve_database(file_path: String, name: String) -> Result<DatabaseConf
     return Ok(database.clone());
 }
 
-pub fn read_databases(file_path: String) -> Result<Vec<DatabaseConfig>, Error> {
-    let config = read_config(file_path)?;
+pub fn read_databases() -> Result<Vec<DatabaseConfig>, Error> {
+    let config = read_config()?;
     return Ok(config.databases);
 }
 
-pub fn change_active_database(file_path: String, name: String) -> Result<(), Error> {
-    let mut config = read_config(file_path.clone())?;
+pub fn change_active_database(name: String) -> Result<(), Error> {
+    let mut config = read_config()?;
 
     if !config.connection_exists(&name) {
         return Err(Error::DatabaseNotFound(name));
@@ -100,7 +104,7 @@ pub fn change_active_database(file_path: String, name: String) -> Result<(), Err
 
     config.set_active_database(name);
 
-    save_config(file_path, config)?;
+    save_config(config)?;
 
     return Ok(());
 }

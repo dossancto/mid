@@ -30,8 +30,7 @@ pub fn edit() {
 }
 
 pub fn list() {
-    let file_path = get_global_config_file_path();
-    let res = manage::read_databases(file_path.to_owned());
+    let res = manage::read_databases();
 
     match res {
         Ok(databases) => {
@@ -45,8 +44,7 @@ pub fn list() {
 }
 
 pub fn remove(name: &str) {
-    let file_path = get_global_config_file_path();
-    let res = manage::remove_database(file_path.to_owned(), name.to_owned());
+    let res = manage::remove_database(name.to_owned());
 
     match res {
         Ok(_) => println!("Remote config removed successfully. Database: {}", name),
@@ -57,8 +55,7 @@ pub fn remove(name: &str) {
 }
 
 pub fn retrieve(name: &str) {
-    let file_path = get_global_config_file_path();
-    let database = match manage::retrieve_database(file_path, name.to_owned()) {
+    let database = match manage::retrieve_database(name.to_owned()) {
         Ok(database) => database,
         Err(error) => {
             eprintln!("Failed to retrieve remote config: {error}");
@@ -82,8 +79,7 @@ pub fn retrieve(name: &str) {
 }
 
 pub fn switch(name: &str) {
-    let file_path = get_global_config_file_path();
-    let res = manage::change_active_database(file_path.to_owned(), name.to_owned());
+    let res = manage::change_active_database(name.to_owned());
 
     match res {
         Ok(_) => println!("Switched active connection to {}", name),
@@ -94,9 +90,7 @@ pub fn switch(name: &str) {
 }
 
 pub fn password(name: &str, password: &str) {
-    let file_path = get_global_config_file_path();
-
-    let database = match manage::retrieve_database(file_path, name.to_owned()) {
+    let database = match manage::retrieve_database(name.to_owned()) {
         Ok(database) => database,
         Err(error) => {
             eprintln!("Failed to retrieve database: {error}");
@@ -189,15 +183,11 @@ pub fn add(
         connection_string = sanitized;
     }
 
-    let file_path = get_global_config_file_path();
-    let res = manage::add_database(
-        file_path.to_owned(),
-        DatabaseConfig {
-            name: name.to_owned(),
-            connection_string,
-            is_secure,
-        },
-    );
+    let res = manage::add_database(DatabaseConfig {
+        name: name.to_owned(),
+        connection_string,
+        is_secure,
+    });
 
     match res {
         Ok(_) => println!("Remote config added successfully. Database: {}", name),

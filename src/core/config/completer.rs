@@ -5,12 +5,11 @@ use clap_complete::CompletionCandidate;
 use crate::core::{
     config::manage,
     databases::adapters::database_type::{DatabaseHandler, DbValue},
-    globals::get_global_config_file_path,
 };
 
 pub fn complete_remotes(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(config) = manage::read_config(get_global_config_file_path()) else {
+    let Ok(config) = manage::read_config() else {
         return Vec::new();
     };
     let active_remote = config.active_remote;
@@ -35,7 +34,7 @@ pub fn complete_remotes(current: &OsStr) -> Vec<CompletionCandidate> {
 
 pub fn complete_tables(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(config) = manage::read_config(get_global_config_file_path()) else {
+    let Ok(config) = manage::read_config() else {
         return Vec::new();
     };
     let Ok(database) = config.get_database_type() else {

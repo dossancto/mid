@@ -2,9 +2,8 @@ use crate::core::{self, history::HistoryRequestType, query::QueryOutputFormat};
 
 pub async fn last(output_format: &QueryOutputFormat) {
     let file_path_history = core::globals::get_global_history_file_path();
-    let config_file_path = core::globals::get_global_config_file_path();
     let last_request = core::history::read_history(file_path_history);
-    let config = match core::config::manage::read_config(config_file_path) {
+    let config = match core::config::manage::read_config() {
         Ok(config) => config,
         Err(e) => {
             eprintln!("Failed to read config: {e}");

@@ -1,8 +1,7 @@
-use crate::core::{config::manage, globals};
+use crate::core::config::manage;
 
 pub fn status() {
-    let file_path = globals::get_global_config_file_path();
-    let current_config = manage::read_config(file_path);
+    let current_config = manage::read_config();
 
     match current_config {
         Ok(config) => {
