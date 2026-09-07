@@ -1,7 +1,7 @@
 use crate::core::config::manage;
 
 pub fn status() {
-    let current_config = manage::read_config();
+    let current_config = manage::read_config_all();
 
     match current_config {
         Ok(config) => {

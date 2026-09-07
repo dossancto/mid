@@ -9,7 +9,7 @@ use crate::core::{
 
 pub fn complete_remotes(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(config) = manage::read_config() else {
+    let Ok(config) = manage::read_config_all() else {
         return Vec::new();
     };
     let active_remote = config.active_remote;
@@ -34,7 +34,7 @@ pub fn complete_remotes(current: &OsStr) -> Vec<CompletionCandidate> {
 
 pub fn complete_tables(current: &OsStr) -> Vec<CompletionCandidate> {
     let prefix = current.to_string_lossy();
-    let Ok(config) = manage::read_config() else {
+    let Ok(config) = manage::read_config_all() else {
         return Vec::new();
     };
     let Ok(database) = config.get_database_type() else {

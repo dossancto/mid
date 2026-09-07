@@ -24,7 +24,7 @@ pub fn list() {
 }
 
 pub fn last() {
-    let config = match core::config::manage::read_config() {
+    let config = match core::config::manage::read_config_all() {
         Ok(config) => config,
         Err(e) => {
             eprintln!("Failed to read config: {e}");

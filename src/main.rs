@@ -5,11 +5,13 @@ use clap_complete::{CompleteEnv, Shell};
 
 use crate::cli::commands::history_handler;
 use crate::cli::commands::list_handler;
+use crate::cli::commands::local_handler;
 use crate::cli::commands::query_handler;
 use crate::cli::commands::remote_handler;
 use crate::cli::commands::status_handler;
 use crate::cli::config::Cli;
 use crate::cli::config::HistoryCommands;
+use crate::cli::config::LocalCommands;
 use crate::cli::config::MainCommands;
 use crate::cli::config::QueryCommands;
 use crate::cli::config::RemoteCommands;
@@ -56,6 +58,10 @@ async fn main() {
             Some(RemoteCommands::Password { name, password }) => {
                 remote_handler::password(name, password)
             }
+            Some(RemoteCommands::Local { command }) => match command {
+                Some(LocalCommands::Init) => local_handler::init(),
+                None => {}
+            },
             None => {}
         },
         MainCommands::Switch { name } => remote_handler::switch(name),

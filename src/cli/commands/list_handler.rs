@@ -12,7 +12,7 @@ pub async fn list(
         return Ok(());
     }
 
-    let config = manage::read_config()?;
+    let config = manage::read_config_all()?;
     let database = config.get_database_type()?;
 
     let query = database.list_tables();
@@ -33,7 +33,7 @@ async fn handle_selected_table(
     table_name: &str,
     output_format: &QueryOutputFormat,
 ) -> Result<(), Error> {
-    let config = manage::read_config()?;
+    let config = manage::read_config_all()?;
     let database = config.get_database_type()?;
     let query = database.select(table_name);
 

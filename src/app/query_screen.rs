@@ -380,7 +380,7 @@ impl QueryScreen {
             return;
         };
 
-        let config = manage::read_config().unwrap();
+        let config = manage::read_config_all().unwrap();
         let database = config.get_database_type().unwrap();
         let update_query = database.update(
             &table,
@@ -411,7 +411,7 @@ impl QueryScreen {
             selected_by_row.entry(row).or_default().push(column);
         }
 
-        let config = manage::read_config().unwrap();
+        let config = manage::read_config_all().unwrap();
         let database = config.get_database_type().unwrap();
 
         let mut queries = Vec::new();

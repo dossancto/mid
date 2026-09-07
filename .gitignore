@@ -2,3 +2,5 @@
 
 .midconfig.toml
 .env
+mid/
+mid/.midconfig.toml

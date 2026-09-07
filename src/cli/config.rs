@@ -120,4 +120,14 @@ pub enum RemoteCommands {
         #[arg()]
         password: String,
     },
+    #[command(arg_required_else_help = true)]
+    Local {
+        #[command(subcommand)]
+        command: Option<LocalCommands>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum LocalCommands {
+    Init,
 }

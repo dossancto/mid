@@ -103,7 +103,7 @@ async fn execute_query_on_database(
     pb.set_message("Executing query...");
     pb.enable_steady_tick(Duration::from_millis(80));
 
-    let config = manage::read_config()?;
+    let config = manage::read_config_all()?;
 
     let active_database = config
         .get_active_database()
