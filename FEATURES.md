@@ -3,12 +3,18 @@
 This document explains every user-facing `mid` command, output format, and
 interactive table control.
 
+Version 0.1.3 adds OS secret-manager password storage, secure-remote password
+updates, connection-string retrieval, and configuration editing through `$EDITOR`.
+
 ## Command overview
 
 ```text
 mid --help
 mid remote list
-mid remote add [CONNECTION_STRING] --name <NAME> [--database-type <TYPE>]
+mid remote add [CONNECTION_STRING] --name <NAME> [--database-type <TYPE>] [--is-secure]
+mid remote edit
+mid remote retrieve <NAME>
+mid remote password <NAME> <PASSWORD>
 mid remote remove <NAME>
 mid remote switch <NAME>
 mid status
@@ -51,7 +57,7 @@ Connections are called "remotes." The active remote is used by `query` and
 ### Add a remote
 
 ```sh
-mid remote add [CONNECTION_STRING] --name <NAME> [--database-type <TYPE>]
+mid remote add [CONNECTION_STRING] --name <NAME> [--database-type <TYPE>] [--is-secure]
 ```
 
 Examples:
@@ -77,6 +83,57 @@ mid remote add --name app-mysql --database-type mysql
 This opens `$EDITOR` with a complete connection-string template. Saving and
 closing the editor adds the remote; leaving the content empty cancels. Adding a
 remote does not activate it, so use `remote switch` afterward.
+
+### Store a password securely
+
+Use `--is-secure` (or `-s`) to save only the password in the operating system's
+secret manager:
+
+```sh
+mid remote add 'postgres://user:pass%23word@localhost/app' --name app --is-secure
+mid remote add 'mysql://user:password@localhost/app' --name app-mysql -s
+```
+
+The config stores `is_secure = true` and a URL such as
+`postgres://user:{pass}@localhost/app`. The secret manager stores the decoded
+password (`pass#word` in the first example), under service `mid` and the remote
+name. Connections restore and URL-encode the password automatically. An
+available, unlocked OS secret manager is required.
+
+Passwords embedded in connection URLs must be percent-encoded: `#` becomes
+`%23`, `@` becomes `%40`, and `%` becomes `%25`. Quote the complete URL when
+passing it through the shell.
+
+### Update a secure remote's password
+
+```sh
+mid remote password app 'new#password'
+```
+
+Pass the raw password, not a URL or a percent-encoded password. This updates the
+OS secret-manager entry; it does not change the database server's password or
+the config URL. Non-secure remotes are rejected.
+
+### Retrieve a connection string
+
+```sh
+mid remote retrieve app
+```
+
+Prints the connection URL directly. For secure remotes, the URL includes the
+password retrieved from the OS secret manager, properly percent-encoded.
+This output contains credentials; avoid sharing it or writing it to logs.
+
+### Edit remote configuration
+
+```sh
+mid remote edit
+```
+
+Opens the global configuration file in `$EDITOR`. Secure passwords stay in the
+secret manager; use `remote password` to change them. Remote names identify
+secret-manager entries, so renaming a secure remote in the file does not move
+its saved secret.
 
 ### List remotes
 
@@ -121,8 +178,14 @@ $XDG_CONFIG_HOME/mid/.midconfig.toml
 
 On a typical Linux installation, this is `~/.config/mid/.midconfig.toml`.
 
-Connection strings are currently stored as plain text. Protect this file with
-appropriate filesystem permissions and do not commit or share it.
+Without `--is-secure`, connection strings, including passwords, are stored as
+plain text. Secure remotes store a `{pass}` placeholder instead; other connection
+details remain visible in the file. Protect this file with appropriate filesystem
+permissions and do not commit or share it. Passwords supplied as command-line
+arguments may also remain in shell history.
+
+If an earlier development build saved a full URL in the secret manager, use
+`mid remote password <NAME> '<RAW_PASSWORD>'` to replace it with just the password.
 
 ## Query commands
 
