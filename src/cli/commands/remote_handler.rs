@@ -67,7 +67,7 @@ pub fn retrieve(name: &str) {
     };
 
     let connection_string = if database.is_secure {
-        match SecretManager::new(database.name).get_password() {
+        match SecretManager::new(database.name).connection_string(&database.connection_string) {
             Ok(connection_string) => connection_string,
             Err(_) => {
                 eprintln!("Failed to retrieve connection string from the OS secret manager");
@@ -88,6 +88,32 @@ pub fn switch(name: &str) {
     match res {
         Ok(_) => println!("Switched active connection to {}", name),
         Err(e) => eprintln!("Failed to switch active connection: {e}"),
+    }
+
+    return;
+}
+
+pub fn password(name: &str, password: &str) {
+    let file_path = get_global_config_file_path();
+
+    let database = match manage::retrieve_database(file_path, name.to_owned()) {
+        Ok(database) => database,
+        Err(error) => {
+            eprintln!("Failed to retrieve database: {error}");
+            return;
+        }
+    };
+
+    if !database.is_secure {
+        eprintln!("Cannot set password: remote '{name}' is not secure");
+        return;
+    }
+
+    let result = SecretManager::new(name.to_owned()).save_password(password.to_owned());
+
+    match result {
+        Ok(_) => println!("Password set for {}", name),
+        Err(e) => eprintln!("Failed to set password: {e}"),
     }
 
     return;
@@ -146,8 +172,15 @@ pub fn add(
                 return;
             }
         };
+        let password = match extract_password(&connection_string) {
+            Ok(password) => password,
+            Err(error) => {
+                eprintln!("{error}");
+                return;
+            }
+        };
         if SecretManager::new(name.to_owned())
-            .save_password(connection_string.clone())
+            .save_password(password)
             .is_err()
         {
             eprintln!("Failed to save remote password in the os manager");
@@ -183,9 +216,22 @@ fn sanitize_connection_string(connection_string: &str) -> Result<String, Error> 
         return Err(Error::InvalidConnection);
     }
     url.password().ok_or(Error::MissingPassword)?;
-    url.set_password(None)
+    url.set_password(Some("placeholder"))
         .map_err(|_| Error::InvalidConnection)?;
-    Ok(url.into())
+    Ok(format!(
+        "{}{pass}{}",
+        &url[..url::Position::BeforePassword],
+        &url[url::Position::AfterPassword..],
+        pass = "{pass}"
+    ))
+}
+
+fn extract_password(connection_string: &str) -> Result<String, Error> {
+    let url = url::Url::parse(connection_string).map_err(|_| Error::InvalidConnection)?;
+    percent_encoding::percent_decode_str(url.password().ok_or(Error::MissingPassword)?)
+        .decode_utf8()
+        .map(|value| value.into_owned())
+        .map_err(|_| Error::InvalidConnection)
 }
 
 #[cfg(test)]
@@ -201,7 +247,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 url,
-                format!("{scheme}://user@[::1]:5432/db?sslmode=require")
+                format!("{scheme}://user:{{pass}}@[::1]:5432/db?sslmode=require")
             );
         }
     }

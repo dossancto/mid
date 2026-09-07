@@ -22,8 +22,7 @@ impl PostgresHandler {
     pub fn new(mut config: DatabaseConfig) -> Result<Self, Error> {
         if config.is_secure {
             config.connection_string = SecretManager::new(config.name.clone())
-                .get_password()
-                .map_err(|_| Error::SecretUnavailable)?;
+                .connection_string(&config.connection_string)?;
         }
         Ok(Self { config })
     }

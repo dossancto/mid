@@ -114,4 +114,10 @@ pub enum RemoteCommands {
         #[arg()]
         name: String,
     },
+    Password {
+        #[arg()]
+        name: String,
+        #[arg()]
+        password: String,
+    },
 }
