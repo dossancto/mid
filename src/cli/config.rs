@@ -110,4 +110,8 @@ pub enum RemoteCommands {
         name: String,
     },
     Edit,
+    Retrieve {
+        #[arg()]
+        name: String,
+    },
 }

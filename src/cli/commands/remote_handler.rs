@@ -56,6 +56,31 @@ pub fn remove(name: &str) {
     return;
 }
 
+pub fn retrieve(name: &str) {
+    let file_path = get_global_config_file_path();
+    let database = match manage::retrieve_database(file_path, name.to_owned()) {
+        Ok(database) => database,
+        Err(error) => {
+            eprintln!("Failed to retrieve remote config: {error}");
+            return;
+        }
+    };
+
+    let connection_string = if database.is_secure {
+        match SecretManager::new(database.name).get_password() {
+            Ok(connection_string) => connection_string,
+            Err(_) => {
+                eprintln!("Failed to retrieve connection string from the OS secret manager");
+                return;
+            }
+        }
+    } else {
+        database.connection_string
+    };
+
+    println!("{connection_string}");
+}
+
 pub fn switch(name: &str) {
     let file_path = get_global_config_file_path();
     let res = manage::change_active_database(file_path.to_owned(), name.to_owned());

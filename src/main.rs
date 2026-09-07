@@ -52,6 +52,7 @@ async fn main() {
             Some(RemoteCommands::Remove { name }) => remote_handler::remove(name),
             Some(RemoteCommands::Switch { name }) => remote_handler::switch(name),
             Some(RemoteCommands::Edit {}) => remote_handler::edit(),
+            Some(RemoteCommands::Retrieve { name }) => remote_handler::retrieve(name),
             None => {}
         },
         MainCommands::Switch { name } => remote_handler::switch(name),

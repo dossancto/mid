@@ -75,6 +75,17 @@ pub fn remove_database(file_path: String, name: String) -> Result<(), Error> {
     return Ok(());
 }
 
+pub fn retrieve_database(file_path: String, name: String) -> Result<DatabaseConfig, Error> {
+    let config = read_config(file_path)?;
+
+    if !config.connection_exists(&name) {
+        return Err(Error::DatabaseNotFound(name));
+    }
+
+    let database = config.databases.iter().find(|db| db.name == name).unwrap();
+    return Ok(database.clone());
+}
+
 pub fn read_databases(file_path: String) -> Result<Vec<DatabaseConfig>, Error> {
     let config = read_config(file_path)?;
     return Ok(config.databases);
