@@ -62,4 +62,10 @@ impl DatabaseHandler for MySqlHandler {
     fn table_name(&self, table_name: &str) -> String {
         format!("`{}`", table_name.replace('`', "``"))
     }
+
+    fn list_databases_query(&self) -> String {
+        "SELECT schema_name AS database_name,
+        FROM information_schema.schemata;"
+            .to_string()
+    }
 }

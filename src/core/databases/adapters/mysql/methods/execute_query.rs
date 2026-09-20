@@ -6,6 +6,14 @@ use sqlx::{
 use crate::core::config::types::DatabaseConfig;
 use crate::core::databases::adapters::database_type::{DbValue, Error, QueryResult};
 
+const MAX_VARBINARY_CHARACTERS: usize = 256;
+
+fn bounded_varbinary(value: Vec<u8>) -> DbValue {
+    let text = String::from_utf8_lossy(&value);
+    let preview: String = text.chars().take(MAX_VARBINARY_CHARACTERS).collect();
+    DbValue::Text(preview)
+}
+
 /// Use this method to run an arbitrary query on the active database connection.
 pub async fn execute_mysql_query(
     config: &DatabaseConfig,
@@ -88,8 +96,13 @@ pub async fn execute_mysql_query(
                                     .map(DbValue::Integer)
                                     .unwrap_or(DbValue::Null)
                             }),
-                        "BINARY" | "VARBINARY" | "BLOB" | "TINYBLOB" | "MEDIUMBLOB"
-                        | "LONGBLOB" => DbValue::Text("<binary>".to_string()),
+                        "VARBINARY" => row
+                            .try_get::<Vec<u8>, _>(index_column)
+                            .map(bounded_varbinary)
+                            .unwrap_or(DbValue::Null),
+                        "BINARY" | "BLOB" | "TINYBLOB" | "MEDIUMBLOB" | "LONGBLOB" => {
+                            DbValue::Text("<binary>".to_string())
+                        }
                         _ => row
                             .try_get::<String, _>(index_column)
                             .map(DbValue::Text)

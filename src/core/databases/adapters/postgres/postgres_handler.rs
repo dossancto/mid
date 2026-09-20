@@ -62,4 +62,8 @@ impl DatabaseHandler for PostgresHandler {
     fn table_name(&self, table_name: &str) -> String {
         format!("\"{}\"", table_name.replace('"', "\"\""))
     }
+
+    fn list_databases_query(&self) -> String {
+        "SELECT datname AS database_name, pg_size_pretty(pg_database_size(datname)) AS size FROM pg_database WHERE datistemplate = false;".to_string()
+    }
 }

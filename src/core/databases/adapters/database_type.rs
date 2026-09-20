@@ -101,4 +101,5 @@ pub trait DatabaseHandler {
         values: &[(&str, &DbValue)],
     ) -> String;
     fn table_name(&self, table_name: &str) -> String;
+    fn list_databases_query(&self) -> String;
 }

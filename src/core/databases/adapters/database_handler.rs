@@ -66,4 +66,12 @@ impl DatabaseHandler for DatabaseType {
             DatabaseType::SQLite() => todo!(),
         }
     }
+
+    fn list_databases_query(&self) -> String {
+        match self {
+            DatabaseType::Postgres(handler) => handler.list_databases_query(),
+            DatabaseType::MySQL(handler) => handler.list_databases_query(),
+            DatabaseType::SQLite() => todo!(),
+        }
+    }
 }
