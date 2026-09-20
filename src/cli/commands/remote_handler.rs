@@ -5,7 +5,7 @@ use crate::{
     core::{
         config::{manage, types::DatabaseConfig},
         editor::open_editor::{open_editor_in_file, open_editor_recover_text},
-        globals::get_global_config_file_path,
+        globals::get_current_or_global_config_file_path,
         secret::secret_manager::SecretManager,
     },
 };
@@ -23,7 +23,8 @@ enum Error {
 }
 
 pub fn edit() {
-    let file_path = get_global_config_file_path();
+    let file_path = get_current_or_global_config_file_path();
+
     if let Err(error) = open_editor_in_file(std::path::Path::new(&file_path)) {
         eprintln!("Failed to open remote config: {error}");
     }

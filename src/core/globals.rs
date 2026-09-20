@@ -18,6 +18,17 @@ pub fn get_current_config_file_path() -> Result<String, Error> {
     return get_current_file_path(CONFIG_FILE_NAME);
 }
 
+/// Returns the project config when it exists, otherwise the global config path.
+pub fn get_current_or_global_config_file_path() -> String {
+    if let Ok(path) = get_current_config_file_path()
+        && std::path::Path::new(&path).is_file()
+    {
+        return path;
+    }
+
+    get_global_config_file_path()
+}
+
 fn get_current_file_path(file_name: &str) -> Result<String, Error> {
     let current_dir = std::env::current_dir()?;
     Ok(current_dir.join(file_name).to_string_lossy().into_owned())
