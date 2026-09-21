@@ -1,6 +1,6 @@
 use sqlx::{
     AssertSqlSafe, Column, Row, TypeInfo, ValueRef,
-    postgres::PgPoolOptions,
+    postgres::{PgPoolOptions, PgValueFormat},
     types::{Uuid, chrono},
 };
 
@@ -49,10 +49,26 @@ pub async fn execute_postgres_query(
                             .try_get::<Uuid, _>(index_column)
                             .map(|u| DbValue::Text(u.to_string()))
                             .unwrap_or(DbValue::Null),
-                        "TIMESTAMP" | "TIMESTAMPTZ" => row
-                            .try_get::<chrono::DateTime<chrono::Utc>, _>(index_column)
-                            .map(|dt| DbValue::DateTime(dt))
-                            .unwrap_or(DbValue::Null),
+                        "TIMESTAMP" | "TIMESTAMPTZ" => {
+                            match row.try_get::<String, _>(index_column) {
+                                Ok(value) => match value.as_str() {
+                                    "-infinity" | "infinity" => DbValue::Text(value),
+                                    _ => row
+                                        .try_get::<chrono::DateTime<chrono::Utc>, _>(index_column)
+                                        .map(|t| DbValue::Text(t.to_string()))
+                                        .unwrap_or(DbValue::Null),
+                                },
+                                Err(_) => postgres_infinity(value_ref)
+                                    .or_else(|| {
+                                        row.try_get::<chrono::DateTime<chrono::Utc>, _>(
+                                            index_column,
+                                        )
+                                        .ok()
+                                        .map(DbValue::DateTime)
+                                    })
+                                    .unwrap_or(DbValue::Null),
+                            }
+                        }
                         "VARCHAR" | "TEXT" | "BPCHAR" | "NAME" => row
                             .try_get::<String, _>(index_column)
                             .map(DbValue::Text)
@@ -107,6 +123,26 @@ pub async fn execute_postgres_query(
         headers,
         rows: parsed_rows,
     });
+}
+
+fn postgres_infinity(value: sqlx::postgres::PgValueRef<'_>) -> Option<DbValue> {
+    match value.format() {
+        PgValueFormat::Text => match value.as_str().ok()? {
+            "-infinity" => Some(DbValue::Text("-infinity".to_owned())),
+            "infinity" => Some(DbValue::Text("infinity".to_owned())),
+            _ => None,
+        },
+        PgValueFormat::Binary => {
+            let bytes = value.as_bytes().ok()?;
+            if bytes == i64::MIN.to_be_bytes() || bytes == i32::MIN.to_be_bytes() {
+                Some(DbValue::Text("-infinity".to_owned()))
+            } else if bytes == i64::MAX.to_be_bytes() || bytes == i32::MAX.to_be_bytes() {
+                Some(DbValue::Text("infinity".to_owned()))
+            } else {
+                None
+            }
+        }
+    }
 }
 
 /// Execute one or more data-modification statements without preparing them.
