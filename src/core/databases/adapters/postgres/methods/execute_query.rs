@@ -93,6 +93,9 @@ pub async fn execute_postgres_query(
                             .try_get::<bool, _>(index_column)
                             .map(DbValue::Boolean)
                             .unwrap_or(DbValue::Null),
+                        "JSONB" => postgres_jsonb(value_ref)
+                            .map(DbValue::Json)
+                            .unwrap_or(DbValue::Null),
                         "FLOAT4" | "REAL" => row
                             .try_get::<f32, _>(index_column)
                             .map(|n| DbValue::Float(n as f64))
@@ -141,6 +144,17 @@ fn postgres_infinity(value: sqlx::postgres::PgValueRef<'_>) -> Option<DbValue> {
             } else {
                 None
             }
+        }
+    }
+}
+
+fn postgres_jsonb(value: sqlx::postgres::PgValueRef<'_>) -> Option<String> {
+    match value.format() {
+        PgValueFormat::Text => value.as_str().ok().map(str::to_owned),
+        // PostgreSQL prefixes the JSONB binary representation with a version byte.
+        PgValueFormat::Binary => {
+            let bytes = value.as_bytes().ok()?;
+            String::from_utf8(bytes.get(1..)?.to_vec()).ok()
         }
     }
 }
