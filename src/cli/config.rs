@@ -37,6 +37,9 @@ pub enum MainCommands {
 
     Status {},
 
+    /// Print the paths used by MID for its configuration and history files.
+    Info {},
+
     List {
         #[arg(short, long, add = ArgValueCompleter::new(complete_tables))]
         table_name: Option<String>,
