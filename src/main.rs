@@ -11,6 +11,7 @@ use crate::cli::config::HistoryCommands;
 use crate::cli::config::MainCommands;
 use crate::cli::config::QueryCommands;
 use crate::cli::config::RemoteCommands;
+use crate::core::globals;
 
 pub mod app;
 mod cli;
@@ -41,6 +42,10 @@ async fn main() {
             }
         }
         MainCommands::Status {} => status_handler::status(),
+        MainCommands::Info {} => {
+            println!("Config file: {}", globals::get_global_config_file_path());
+            println!("History file: {}", globals::get_global_history_file_path());
+        }
         MainCommands::Query {
             query,
             output_format,

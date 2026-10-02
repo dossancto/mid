@@ -30,6 +30,9 @@ pub enum MainCommands {
 
     Status {},
 
+    /// Print the paths used by MID for its configuration and history files.
+    Info {},
+
     List {
         #[arg(short, long)]
         table_name: Option<String>,
