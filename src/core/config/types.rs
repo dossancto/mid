@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::core::databases::adapters::DatabaseType;
+use crate::core::databases::adapters::{
+    database_type::{DatabaseType, Error},
+    mysql::mysql_handler::MySqlHandler,
+    postgres::postgres_handler::PostgresHandler,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MidConfigFile {
@@ -8,10 +12,31 @@ pub struct MidConfigFile {
     pub databases: Vec<DatabaseConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     pub name: String,
     pub connection_string: String,
+    #[serde(default)]
+    pub is_secure: bool,
+}
+
+impl DatabaseConfig {
+    pub fn get_database_type(&self) -> Result<DatabaseType, Error> {
+        let database_type = self
+            .connection_string
+            .split(':')
+            .next()
+            .ok_or(Error::DatabaseTypeNotFound)?;
+
+        match database_type {
+            "postgres" | "postgresql" => {
+                Ok(DatabaseType::Postgres(PostgresHandler::new(self.clone())?))
+            }
+            "mysql" => Ok(DatabaseType::MySQL(MySqlHandler::new(self.clone())?)),
+            "sqlite" => Ok(DatabaseType::SQLite()),
+            _ => Err(Error::DatabaseTypeNotFound),
+        }
+    }
 }
 
 impl Default for MidConfigFile {
@@ -38,16 +63,30 @@ impl MidConfigFile {
         self.active_remote = Some(name);
     }
 
-    pub fn get_database_type(&self) -> Option<DatabaseType> {
-        let active_db = self.get_active_database()?;
+    pub fn get_database_type(&self) -> Result<DatabaseType, Error> {
+        let active_db = self
+            .get_active_database()
+            .ok_or(Error::NoActiveRemoteConnection)?;
 
-        let database_type = active_db.connection_string.split(':').next()?;
+        let database_type = active_db
+            .connection_string
+            .split(':')
+            .next()
+            .ok_or(Error::DatabaseTypeNotFound)?;
 
         match database_type {
-            "postgres" | "postgresql" => Some(DatabaseType::Postgres),
-            "mysql" => Some(DatabaseType::MySQL),
-            "sqlite" => Some(DatabaseType::SQLite),
-            _ => None,
+            "postgres" | "postgresql" => Ok(DatabaseType::Postgres(
+                crate::core::databases::adapters::postgres::postgres_handler::PostgresHandler::new(
+                    active_db.clone(),
+                )?,
+            )),
+            "mysql" => Ok(DatabaseType::MySQL(
+                crate::core::databases::adapters::mysql::mysql_handler::MySqlHandler::new(
+                    active_db.clone(),
+                )?,
+            )),
+            "sqlite" => Ok(DatabaseType::SQLite()),
+            _ => Err(Error::DatabaseTypeNotFound),
         }
     }
 }

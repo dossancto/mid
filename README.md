@@ -1,151 +1,129 @@
-
-This document contains all the things the application needs to do.
-
 # mid
 
-`mid` is a Rust command-line tool for connecting to configured database
-remotes and running ad-hoc queries from the terminal.
+`mid` is a terminal database client written in Rust for managing connections,
+running queries, and quickly exploring results.
+
+> `mid` is currently under active development. 
+
+Version 0.1.3 adds secure password storage and remote credential management.
 
 ## Features
 
-- Run ad-hoc database queries from the terminal.
-- View query results as an interactive table or formatted JSON.
-- Manage saved database connections: add, remove, list, and switch remotes.
-- Connect to PostgreSQL databases.
-- Recognize MySQL connections for planned adapter support.
+- PostgreSQL and MySQL connections.
+- Interactive and `$EDITOR`-based connection setup.
+- Optional OS secret-manager password storage with `--is-secure`.
+- Secure password updates, connection-string retrieval, and config editing.
+- TUI-based interactive query-result table.
+- Column filtering and ascending/descending sorting.
+- Multi-cell selection and generated multi-row updates.
+- Query editing through `$EDITOR`.
+- Per-remote query history and replay.
 
-## Feature Status
+All commands, options, examples, TUI controls, and detailed feature explanations
+are documented in [FEATURES.md](FEATURES.md).
 
-| Feature | Status |
-| --- | --- |
-| Query table view | Working |
-| Query JSON output | Working |
-| Remote add | Working |
-| Remote remove | Working |
-| Remote list | Working |
-| Remote switch | Working |
+## Status
 
-## Database Support
-
-| Database | Status |
-| --- | --- |
-| PostgreSQL | Working |
-| MySQL | Planned |
-| SQLite | Planned |
+| Capability | PostgreSQL | MySQL | SQLite |
+| --- | --- | --- | --- |
+| Connect and run queries | Working | Working | Planned |
+| Interactive table output | Working | Working | Planned |
+| JSON output | Working | Working | Planned |
+| SQL `INSERT` export | Working | Working | Planned |
+| List and select tables | Working | Working | Planned |
+| Sort and filter results | Working | Working | Planned |
+| Multi-cell selection | Working | Working | Planned |
+| Update selected values | Experimental | Experimental | Planned |
 
 ## Requirements
 
-- Rust toolchain with Cargo
-- Any supported database server (PostgreSQL, MySQL, SQLite, etc.)
+- Rust and Cargo.
+- PostgreSQL or MySQL access credentials.
+- `$EDITOR` for editor-based connection setup and query editing (optional for
+  other workflows).
+- An available, unlocked OS secret manager when using secure remotes.
 
-## Install
-
-From the project root:
-
-```sh
-cargo build
-```
-
-For local development, run commands through Cargo:
+## Secure connections (0.1.3)
 
 ```sh
-cargo run -- --help
+mid remote add 'postgres://user:pass%23word@localhost/app' --name app --is-secure
+mid remote switch app
+mid remote password app 'new#password'
 ```
 
-To install the binary into your Cargo bin directory:
+Only the decoded password is saved in the OS secret manager. The config URL
+contains `{pass}`, and `mid` restores the password when connecting. Encode
+reserved password characters in connection URLs (`#` as `%23`); pass a raw
+password to `remote password`. That command updates only secure remotes and
+does not change the password on the database server.
+
+Use `mid remote edit` to open config in `$EDITOR`, or `mid remote retrieve app`
+to print the complete connection URL, including its password. Treat that output
+as sensitive. Without `--is-secure`, passwords remain in the config file;
+command-line credentials may also appear in shell history.
+
+## Installation
+
+Build the project:
+
+```sh
+cargo build --release
+```
+
+Install `mid` into Cargo's binary directory:
 
 ```sh
 cargo install --path .
 ```
 
-## Remote
-
-Use remote to connect to some database servers. Removes can either be global or local.
-
-Remotes are the actual server, but the user can change the current database with `database` command.
-
-Even this command should return the actual database
+If you're testing a local build, replace `mid` in the documentation examples with
+`cargo run --`:
 
 ```sh
-mid remote status
-# connected to my_server:my_application_db_dev
+cargo run -- --help
 ```
-### Sugestions
 
-We recommend adding `.mid_config.toml` into your global .gitignore file to prevent commiting that files to git.
+## Shell completion
 
-### Local Remotes
-
-Local remotes are stored into a `.mid_config.toml` file 
-
-### Global Remotes
-
-## Query Command
-
-Query command runs the query on the **Current Connection**. 
-
-Run a query directily from the CLI.
+Generate and install dynamic Fish completions in Fish's user completion directory:
 
 ```sh
-mid query 'SELECT * FROM users';
+mid generator --shell fish > ~/.config/fish/completions/mid.fish
 ```
 
- Run queries from the STDIN.
- ```sh
-cat 'SELECT * FROM users' | mid query
-# or
-cat my_query.sql | mid query
- ```
+Probably can work with other shells as well.
 
-## Mutate command
-
-Mutate commands are made for mutating the database, inserts, deletes or updates.
-
-Those commands are inits transations by default, and only commits when the user explicit writes `confirm` on the terminal. (Just like `terraform apply` command).
-
-This add guardrails to users dont delete or update in batch, which is dangerous.
+try 
+```sh 
+mid generator --shell {bash,zsh,fish} > ~/.config/{bash,zsh,fish}/completions/mid.{bash,zsh,fish}
+```
+after add the completions directory to your shell's config:
 
 ```sh
-mid mutate 'DELETE FROM users;'
-# output:
-# 9421 line afftected, type `yes` to apply
-# > 
+echo 'source ~/.config/{bash,zsh,fish}/completions/mid.{bash,zsh,fish}'
 ```
 
-Or with STDIN
+## Roadmap
 
- ```sh
-cat 'DELETE FROM users;' | mid mutate
-# or
-cat my_truncate.sql | mid mutate
- ```
- Remote is a subcommands for user manage which server it will consume.
- 
- ## Commands
- 
- **ADD**
- 
- The `add` subcommand will insert a new server connection, on local directory or a global one using the `--global` flag.
- 
- Once a remote is add, it will automatically be **active**, the database on the connection string will be used as default. But can be switched using the `database` commands.
- 
- - **Usage**
- ```sh
- # --global is optional, local is the default
- mid remote add 'postgres://etc' --global
- ```
- 
- When using local options, a `.mid_config.toml` file will be created on current working directory.
- 
- That file will contain the server information as the encrypted password.
- 
- **LS**
- 
- Ls sub command list the available remotes, either global and local ones.
- 
- - **Usage**
- ```sh
- mid remote ls
- ```
- 
- **STATUS**
+### Safe mutation workflow
+
+A dedicated `mutate` command is planned but is **not implemented yet**. The
+intended workflow is to run mutations inside a transaction, report the affected
+row count, and require explicit confirmation before committing:
+
+```sh
+# Planned syntax — not currently available
+mid mutate 'DELETE FROM sessions WHERE expires_at < NOW()'
+```
+
+The goal is to provide guardrails for `UPDATE`, `DELETE`, `TRUNCATE`, and other
+potentially destructive operations.
+
+Other planned work includes:
+
+- SQLite support.
+- Durable history storage with SQLite.
+- Safer and more general selected-cell updates.
+- Local/project-specific remotes.
+
+For the full command reference, see [FEATURES.md](FEATURES.md).
