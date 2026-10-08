@@ -127,3 +127,9 @@ Other planned work includes:
 - Local/project-specific remotes.
 
 For the full command reference, see [FEATURES.md](FEATURES.md).
+
+# Credits
+
+MID was originally created with the goal of taking existing TUIs and improving upon them by providing better performance, a faster experience, and a more efficient workspace.
+
+The original idea and project were created by [dossancto](https://github.com/dossancto/mid), who later passed the project on to me and is no longer actively involved in its development.
